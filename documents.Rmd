@@ -5,12 +5,9 @@ date: "2023-01-07"
 output: word_document
 ---
 
-# Load necessary libraries
-
-library(tidyverse) library(caret) library(dplyr) library(ggplot2)
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
 
 ## R Markdown
@@ -22,6 +19,11 @@ When you click the **Knit** button a document will be generated that includes bo
 -   <div>
 
     ```{r Sports Analysis by Conference}
+    # Load necessary libraries
+    library(tidyverse)
+    library(caret)
+    library(dplyr)
+    library(ggplot2)
 
     # Calculate the winning percentage for each team (W=WON, G=Played)
     data <- mutate(data, win_pct = W / G)
