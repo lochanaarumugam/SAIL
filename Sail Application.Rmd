@@ -1,0 +1,285 @@
+---
+title: "Sail Application"
+author: "Lochana Arumugam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+What is the most influential variable in affecting a basketball team's win rate in college basketball?
+
+Taking the data from Andrew Sundbergs' College Basketball Data set, we're going to break down this question into a few parts. I had intentionally left the question a bit broad for exploratory analysis before I narrowed it down to a specific variable. So first we import the packages of tidyverse and caret:
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#libraries
+library(tidyverse)
+library(caret)
+```
+
+and then import our data and rename the data into understandable variables, so some important short forms that might be not clear but we need to know is:
+
+AOE -\> Adjusted Offensive Efficiency
+
+ADE -\> Adjusted Defensive Efficiency
+
+FTR -\> Free Throw Rate
+
+PowerR -\> Power Rating
+
+TwoPShootP -\> Two Point Shooting Percentage
+
+ThreePShootP -\> Three Point Shooting Percentage
+
+```{r}
+rawdata<- read.csv("data.csv")
+colnames(rawdata)<- c("Team","Conference","GamesPlayed","GamesWon","AOE","ADE","PowerR","EFGPS","EFGPA","TOPA","TOPC","ORB","ORBA","FTR","FTRA","TwoPShootP","TwoPAllow","ThreePShootP","ThreePAllow","ADJTempo","WAB","PostSeason","Seed","Year")
+
+```
+
+And since we are evaluating Win Rate, which is a statistic we are not provided with but have the means to do so - by using the data we have of the games won and games played - we calculate that and then we add it back into the data frame for ease of continued usage in our analysis.
+
+```{r}
+WinPerc<- 100*(rawdata$GamesWon/rawdata$GamesPlayed)
+rawdata<-cbind(rawdata,data.frame(WinPerc=WinPerc))
+```
+
+From looking over the data, I noticed the parameter of Conference and I wanted to know if for a specific conference, was there higher win rate in comparison to other conferences- and if so, what may have caused it; but first I needed to summarize the data.
+
+```{r}
+conference_summary <- rawdata %>%
+  group_by(Conference) %>%
+  summarize(meanPowerR = mean(PowerR),
+            meanWinPerc = mean(WinPerc),
+            meanAOE = mean(AOE),
+            meanADE = mean(ADE),
+            meanFTR = mean(FTR),
+            meanTwoPShootP = mean(TwoPShootP),
+            meanThreePShootP = mean(ThreePShootP))
+```
+
+Then I needed to plot this with the specific variables of two point shooting percentage, three point shooting percentage, and conference with the size of the point being their mean win-rate; so we can identify and investigate if there are any stark patterns or similarities or even outliers in this data.
+
+```{r}
+csp<-ggplot(data=conference_summary,aes(x=meanThreePShootP, y=meanTwoPShootP))
+csp+geom_point(aes(size=meanWinPerc,colour=Conference, alpha=0.6)) +
+  xlab("Three Point Shooting Percentage") +
+  ylab("Two Point Shooting Percentage") +
+  ggtitle("Relationship between Win % and Shooting %","categorized by conferences") +
+  theme( plot.title = element_text(colour="DarkBlue",size=15), 
+         plot.subtitle = element_text(colour="DarkBlue",size=10))
+```
+
+It looks as most of the higher win percent teams ( denoted by larger circles ), seem to be clumped together with a general overall higher two point and three point shooting mean - but on average they seemed have higher two point shooting percentage than the others.
+
+We could try to color match for the higher win percentage teams but due to the multitude of conferences displayed- I just pulled out the top 5 with code to see if there is a relationship with the higher winning conferences and higher winning teams that we can later compare.
+
+```{r}
+conferencetop<- conference_summary %>% 
+  top_n(5, meanWinPerc) %>% 
+  select(Conference) %>% 
+  pull()
+
+conferencetop
+```
+
+Now to normalize the data from the teams over the years, we can summarize the data like so - averaging the specific variables that I want to analyze:
+
+```{r}
+team_summary <- rawdata %>%
+  group_by(Team) %>%
+  summarize(meanPowerR = mean(PowerR),
+            meanWinPerc = mean(WinPerc),
+            meanAOE = mean(AOE),
+            meanADE = mean(ADE),
+            meanFTR = mean(FTR),
+            meanTwoPShootP = mean(TwoPShootP),
+            meanThreePShootP = mean(ThreePShootP))
+team_summary
+```
+
+Now we can pick the top teams - and I have picked the top ten (this however can be changed as a bigger sample can increase accuracy, I have avoided doing so to not have an overwhelming index on my graphs, though for later statistical analysis, i have used the top ten and then all the sample data provided for reducing error).
+
+```{r}
+teamtop <- team_summary %>%
+  arrange(desc(meanWinPerc)) %>%
+  top_n(10, meanWinPerc)
+  
+teamtop
+```
+
+Now for graphical representation we can see how each team compares to each other in terms of their mean win percentage
+
+```{r}
+ggplot(data=teamtop,aes(x=Team,y=meanWinPerc,color=Team))+geom_point()+
+  xlab("Team") +
+  ylab("Mean Win Percentage") +
+  ggtitle("Relationship between Team and Win Percentage")
+```
+
+Except for Gonzanga - the other nine teams hover between 77% to 82%. Which does raise the question as to why does Gonzanga have such a high win rate in comparison? By going through the data we can see that in fact they have one of the highest two point shooting percentages in their matches in comparison to other teams which we will see grpahically soon.
+
+Now for these top teams we can look for correlation between certain variables and the win-rate to establish inferences and connections. First we'll take a look at Two Point Shooting Percentage and Win Rate (with the size of a point shows the power rating of the team), then it's statistical correlation with the top ten teams and then with all the teams in the data set. Actively keeping an eye out for Gonzanga.
+
+```{r}
+ggplot(data=teamtop,aes(x=meanTwoPShootP,y=meanWinPerc,color=Team,
+                        size=meanPowerR))+geom_point()+
+  xlab("Mean Two Point Shooting Percentage") +
+  ylab("Mean Win Percentage") +
+  ggtitle("Relationship between Two Point Shooting Percentage and Win Percentage",
+          "+ Power Ratings")
+
+twocor <- cor(teamtop$meanTwoPShootP,teamtop$meanWinPerc)
+twocor
+
+otwocor<-cor(rawdata$TwoPShootP,rawdata$WinPerc)
+otwocor
+```
+
+We can see Gonzanga have one of the highest two point percentages, however does it have the highest power rating? Power rating - simply put - is based off of how stronger a team is in comparison to others in a specific conference. And It looks as if the other teams have similar power ratings and if we leave Gonzanga out of the picture - the other teams aren't set super drastically apart. We can also not that the correlation for the top ten is 0.71 (possibly skewed due to Gonzanga), but when we take the entire data set it falls to 0.59.
+
+Now we can take a look at Three Point Shooting Percentage.
+
+```{r}
+ggplot(data=teamtop,aes(x=meanThreePShootP,y=meanWinPerc,color=Team,
+                        size=meanPowerR))+geom_point()+
+  xlab("Mean Three Point Shooting Percentage") +
+  ylab("Mean Win Percentage") +
+  ggtitle("Relationship between Three Point Shooting Percentage and Win Percentage",
+          "+ Power Ratings")
+
+threecor <- cor(teamtop$meanThreePShootP,teamtop$meanWinPerc)
+threecor
+
+othreecor<-cor(rawdata$ThreePShootP,rawdata$WinPerc)
+othreecor
+```
+
+There doesn't seem to be a strong influence of three point shooting percentages and the win percentages graphically. Numerically, there seems to be a weaker correlation than that of a two pointer but there is definitely some influence.
+
+Now evaluating the Free Throw Rate
+
+```{r}
+ggplot(data=teamtop,aes(x=meanFTR,y=meanWinPerc,color=Team,
+))+geom_point()+
+  xlab("Mean Free Throw Rate") +
+  ylab("Mean Win Percentage") +
+  ggtitle("Relationship between Free Throws and Win Percentage") 
+
+ftrcor <- cor(teamtop$meanFTR,teamtop$meanWinPerc)
+ftrcor
+
+oftrcor<-cor(rawdata$FTR,rawdata$WinPerc)
+oftrcor
+
+```
+
+There seems to be inversely related and then with all the data in the data set it shows nearly no correlation at all. So I'm going to safely put away Free Throw Rate as a stark influence of win percentage.
+
+Then we do the same for Power Rating - however - Power Rating should have a strong correlation as Power Rating is based off on a teams strength and is the comparing statistic in a conference the first place.
+
+```{r}
+ggplot(data=teamtop,aes(x=meanPowerR,y=meanWinPerc,color=Team,
+                       ))+geom_point()+
+  xlab("Mean Power Rating") +
+  ylab("Mean Win Percentage") +
+  ggtitle("Relationship between Power Rating and Win Percentage")
+
+powercor <- cor(teamtop$meanPowerR,teamtop$meanWinPerc)
+powercor
+
+opowercor<-cor(rawdata$PowerR,rawdata$WinPerc)
+opowercor
+
+```
+
+Surprisingly, within the top ten teams, power rating isn't a big influence. however, when calculated amongst all teams, it's influence has seemed to rise. So I want to deduce that once you pass a certain level, the power rating doesn't influence a team's chances - until then however...
+
+And finally we have the graph of Adjusted Offensive Efficiency(AOE) and Adjusted Defensive Efficiency(ADE). The Win Percentage is now depicted by the size of a point.
+
+```{r}
+ggplot(data=teamtop,aes(x=meanAOE,y=meanADE,color=Team,
+                        size=meanWinPerc))+geom_point()+
+  xlab("Mean Adjusted Offensive Effeciency") +
+  ylab("Mean Adjusted Defensive Effeciency") +
+  ggtitle("Relationship between Offensive and Defensive Effecincy with Win Rate")
+
+```
+
+We can see that there seems to be some strong correlation with AOE and win rate and not so much for ADE. So lets take a look at the statistical correlation numbers for a teams chances being based on thier AOE and ADE.
+
+```{r}
+
+AOEcor <- cor(teamtop$meanAOE,teamtop$meanWinPerc)
+AOEcor
+
+oAOE<-cor(rawdata$AOE,rawdata$WinPerc)
+oAOE
+
+ADEcor <- cor(teamtop$meanADE,teamtop$meanWinPerc)
+ADEcor
+
+oADE<-cor(rawdata$ADE,rawdata$WinPerc)
+oADE
+```
+
+To my surprise, while we learnt that AOE has a positive correlation with win rate, ADE in fact, has a strong inverse relationship with the win rate! When your ADE is high, sacrificing the AOE, it can drastically reduce a teams chance of winning. However, most of the wining teams seemed to hover around the same ADE but and increase in their AOE can set them apart.
+
+so I took this information it a step further and created a regression model that can predict a team's win rate based off of your AOE.
+
+```{r}
+set.seed(123)
+train_index <- createDataPartition(rawdata$WinPerc, p = 0.8, list = FALSE)
+train_data <- rawdata[train_index, ]
+test_data <- rawdata[-train_index, ]
+
+model <- lm(WinPerc ~ AOE, data = train_data)
+
+predictions <- predict(model, test_data)
+```
+
+After our data is trained and our model created, we can plot this data and it shows us the linear regression line for the possible win rate based off of a teams AOE score.
+
+```{r}
+ggplot(test_data, aes(x=AOE, y=predictions)) +
+  geom_point() +
+  xlab("Adjusted Offensive Effeciency") +
+  ylab("Predicted Win Percentage")
+```
+
+Furthermore, we must calculate the MSE and R Squared value for this model to determine how accurate this line is as a measure of fit of a model. In the context of regression it is a statistical measure of how well the regression line approximates the actual data.
+
+```{r}
+mse <- mean((predictions - test_data$WinPerc)^2)
+mse
+summary(model)
+```
+
+From the summary(model) we can see what the R Squared value is and it's 0.517 meaning that 51% of the variability of the outcome data cannot be explained by this model. Which is understandable as there are external variables that are influential that we've seen before such as the Two Point Shooting Percent and Three Point.
+
+With this graph we can see all the data points of AOE and Win Percentage plotted from the raw data set, along with a line that shows the average middle from all the variability.
+
+```{r}
+ggplot(data=rawdata, aes(x=AOE,y=WinPerc))+geom_point()+geom_smooth()+
+  xlab("Adjusted Offensive Efficiency")+
+  ylab("Win Percentage")
+```
+
+We can see that there is a huge amount of variability in the data and this may be another explanation as to why the model is not able to predict with high accuracy.
+
+Finally, if you put an AOE number an have it assigned it to the variable named input, when the code runs you can get the predicted win percentage back. Right now, we have a scenario of a team that has an AOE of 120, the final result will be the predicted win percentage.
+
+```{r}
+input<-120
+
+yourdata<-data.frame(AOE=c(input))
+yourchances<-predict(model,yourdata)
+as.vector(yourchances)
+```
+
+A better model can eventually be created by accounting for the multiple different variables that can be used to calculate the win rate. For example, the two point shooting rates and the three point shooting rates. As they do have an influence on the win rate as shown by the overall correlation statistic of 0.59 and 0.43 respectively.
+
+To conclude this analysis, AOE is an important influencing variable that can decide a teams win rate in basketball. The analysis revealed that a teams win percentage can be influenced by multiple variables but the other alternative highest variable would be two point shooting percentage.There are multiple external variables that can also influence a specific variable in another number of ways - such as players, strengths, teammates, strategy, etc.
+
+It is important to note that this analysis does have limitations. Further research is needed, however, the insights gained from this analysis can provide a valuable starting point for understanding how a team can improve their win rate by improving on specific in the context of basketball analysis.
+
+In summary, the analysis of this basketball data has provided new insights into specific variables and the extent of it's influence on a teams win rate. It has shown that with a combination of different metrics, and a deeper analysis of the data, we can provide a more comprehensive picture of the game, and help the teams and coaches to improve their performance and strategies.
